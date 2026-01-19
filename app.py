@@ -1376,7 +1376,12 @@ def load_taxonomy(taxonomy_path: Path, file_mtime: Optional[float]):
 
 def find_taxonomy_path() -> Path:
     candidates = []
-    configured_path = os.getenv("TAXONOMY_PATH") or st.secrets.get("TAXONOMY_PATH", "")
+    configured_path = os.getenv("TAXONOMY_PATH") or ""
+    if not configured_path:
+        try:
+            configured_path = st.secrets.get("TAXONOMY_PATH", "")
+        except Exception:
+            configured_path = ""
     if configured_path:
         candidates.append(Path(configured_path))
     for base_dir in (BASE_DIR, Path.cwd()):
