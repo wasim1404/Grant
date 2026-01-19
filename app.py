@@ -1367,16 +1367,31 @@ def delete_user_profile(profile_name):
     st.success(f"Research profile '{profile_name}' deleted successfully!")
 
 @st.cache_resource
-def load_taxonomy():
-    taxonomy_path = BASE_DIR / "taxonomy.json"
-    try:
+def load_taxonomy(taxonomy_path: Path, file_mtime: Optional[float]):
+    if taxonomy_path.exists():
         with open(taxonomy_path, "r", encoding="utf-8") as f:
             return json.load(f)
-    except FileNotFoundError:
-        st.warning("taxonomy.json not found. Using built-in default taxonomy.")
-        return DEFAULT_TAXONOMY
+    st.warning("taxonomy.json not found. Using built-in default taxonomy.")
+    return DEFAULT_TAXONOMY
 
-taxonomy = load_taxonomy()
+def find_taxonomy_path() -> Path:
+    candidates = []
+    configured_path = os.getenv("TAXONOMY_PATH") or st.secrets.get("TAXONOMY_PATH", "")
+    if configured_path:
+        candidates.append(Path(configured_path))
+    for base_dir in (BASE_DIR, Path.cwd()):
+        candidates.append(base_dir / "taxonomy.json")
+        candidates.append(base_dir.parent / "taxonomy.json")
+        candidates.append(base_dir.parent.parent / "taxonomy.json")
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0] if candidates else (BASE_DIR / "taxonomy.json")
+
+taxonomy_path = find_taxonomy_path()
+
+taxonomy_mtime = taxonomy_path.stat().st_mtime if taxonomy_path.exists() else None
+taxonomy = load_taxonomy(taxonomy_path, taxonomy_mtime)
 
 # --- Page Config ---
 st.set_page_config(page_title="", layout="wide")
