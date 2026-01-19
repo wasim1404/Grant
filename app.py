@@ -9,6 +9,7 @@ from readability import Document
 import trafilatura
 from urllib.parse import urljoin
 import os
+from pathlib import Path
 import base64
 import json
 import csv
@@ -32,7 +33,8 @@ from datetime import datetime, timedelta
 import time
 
 # --- Global Variables & Constants ---
-DATABASE_FILE = 'proposals.db'
+BASE_DIR = Path(__file__).resolve().parent
+DATABASE_FILE = str(BASE_DIR / "proposals.db")
 # DST announcements (primary source for Grant Finder opportunities)
 DST_ANNOUNCEMENTS_URL = "https://dst.gov.in/whatsnew/announcement"
 # ANRF portal homepage (secondary source for Grant Finder opportunities)
@@ -234,8 +236,12 @@ DEFAULT_TAXONOMY = {
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SELECTED_MODEL = "gpt-4o-mini"
 
-# Initialize OpenAI client
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
+# Initialize OpenAI client (graceful if key missing)
+if OPENAI_API_KEY:
+    openai_client = OpenAI(api_key=OPENAI_API_KEY)
+else:
+    openai_client = None
+    st.error("OPENAI_API_KEY is not set. Please set it in your environment or Streamlit Secrets.")
 
 # --- Rate Limiting ---
 LAST_API_CALL_TIME = 0
@@ -249,6 +255,9 @@ class AIResponse:
 # --- AI Helper Functions ---
 def generate_content_with_retry(model_name, prompt, max_retries=5, delay=5):
     global LAST_API_CALL_TIME
+    if openai_client is None:
+        st.error("OPENAI_API_KEY is missing. Set it and restart the app to use AI features.")
+        return None
     
     # Throttle: ensure minimum time between API calls
     current_time = time.time()
@@ -1359,8 +1368,9 @@ def delete_user_profile(profile_name):
 
 @st.cache_resource
 def load_taxonomy():
+    taxonomy_path = BASE_DIR / "taxonomy.json"
     try:
-        with open("taxonomy.json", "r", encoding="utf-8") as f:
+        with open(taxonomy_path, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         st.warning("taxonomy.json not found. Using built-in default taxonomy.")
@@ -1372,16 +1382,16 @@ taxonomy = load_taxonomy()
 st.set_page_config(page_title="", layout="wide")
 
 # Static top-left logo in the sidebar (exact image, not collapsible)
-logo_path = "assets/idea2impact_logo.png"
-if os.path.exists(logo_path):
-    st.sidebar.image(logo_path, use_container_width=False, width=200)
+logo_path = BASE_DIR / "assets" / "idea2impact_logo.png"
+if logo_path.exists():
+    st.sidebar.image(str(logo_path), use_container_width=False, width=200)
 else:
     # If logo is missing, allow one-time upload and persist it
     st.sidebar.markdown('<p style="font-size: 1.3em; font-weight: bold;"></p>', unsafe_allow_html=True)
     uploaded_logo = st.sidebar.file_uploader("Upload logo image (PNG/JPG)", type=["png", "jpg", "jpeg"], key="sidebar_logo_uploader")
     if uploaded_logo is not None:
         try:
-            os.makedirs("assets", exist_ok=True)
+            logo_path.parent.mkdir(parents=True, exist_ok=True)
             with open(logo_path, "wb") as f:
                 f.write(uploaded_logo.getbuffer())
             st.sidebar.success("Logo saved. Reloading...")
